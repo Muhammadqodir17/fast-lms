@@ -8,13 +8,13 @@ from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 # Import your db_url
-from core.database import db_url
+import settings
 
 # Alembic Config object
 config = context.config
 
 # Override sqlalchemy.url with async one
-config.set_main_option("sqlalchemy.url", db_url)
+config.set_main_option("sqlalchemy.url", settings.settings.database.url)
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
