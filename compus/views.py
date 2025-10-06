@@ -1,7 +1,8 @@
-from typing import List
+from typing import List, Optional
 from core.database import get_session
 from sqlalchemy import select
 from fastapi import Depends, APIRouter, status, Path, HTTPException
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 from compus.models import (
     Campus,
@@ -31,6 +32,9 @@ from compus.schemes import (
     GetRequest,
     CreateRequest,
     UpdateRequest,
+    # Logic #
+    BuildingByFloorData,
+    GetBuildingRoom, GetBuildingResponse, GetBuildingByRoomResponse,
 )
 
 router = APIRouter(prefix='/campus', tags=['campus'])
@@ -38,6 +42,7 @@ router_for_building = APIRouter(prefix='/building', tags=['building'])
 router_for_room = APIRouter(prefix='/room', tags=['room'])
 router_for_room_item = APIRouter(prefix='/room_item', tags=['room_item'])
 router_for_request = APIRouter(prefix='/request', tags=['request'])
+router_logic_query = APIRouter(prefix='/logic_query', tags=['logic_query'])
 
 
 #########################
@@ -204,6 +209,13 @@ async def get_room_by_id(db: AsyncSession = Depends(get_session), room_id: int =
 
 @router_for_room.post('/create_room', response_model=GetRoom)
 async def create_room(room_data: CreateRoom, db: AsyncSession = Depends(get_session)):
+    building_query = await db.execute(select(Building).filter(Building.id == room_data.building_id))
+    building_result = building_query.scalars().first()
+    if building_result.floors < room_data.floor:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail='This building has no floor like this'
+        )
     room = Room(**room_data.dict())
     db.add(room)
     await db.commit()
@@ -220,6 +232,20 @@ async def update_room(room_data: UpdateRoom, db: AsyncSession = Depends(get_sess
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail='Room not found'
+        )
+
+    building_query = await db.execute(select(Building).filter(Building.id == room.building_id))
+    building_result = building_query.scalars().first()
+    if building_result is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail='Building not found'
+        )
+
+    if room_data.floor and building_result.floors < room_data.floor:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail='This building has no floor like this'
         )
 
     update_data = room_data.dict(exclude_unset=True)
@@ -279,7 +305,8 @@ async def create_room_item(room_item_data: CreateRoomItems, db: AsyncSession = D
 
 
 @router_for_room_item.patch('/update_room_item/{room_item_id}', response_model=GetRoomItems)
-async def update_room_item(room_item_data: UpdateRoomItems, db: AsyncSession = Depends(get_session), room_item_id: int = Path()):
+async def update_room_item(room_item_data: UpdateRoomItems, db: AsyncSession = Depends(get_session),
+                           room_item_id: int = Path()):
     query = await db.execute(select(RoomItems).filter(RoomItems.id == room_item_id))
     room_item = query.scalars().first()
 
@@ -298,7 +325,7 @@ async def update_room_item(room_item_data: UpdateRoomItems, db: AsyncSession = D
     return room_item
 
 
-@router_for_room_item.delete('delete_room_item/{room_item_id}')
+@router_for_room_item.delete('/delete_room_item/{room_item_id}')
 async def delete_room_item(db: AsyncSession = Depends(get_session), room_item_id: int = Path()):
     query = await db.execute(select(RoomItems).filter(RoomItems.id == room_item_id))
     room_item = query.scalars().first()
@@ -346,7 +373,8 @@ async def create_request(request_data: CreateRequest, db: AsyncSession = Depends
 
 
 @router_for_request.patch('/update_request/{request_id}', response_model=GetRequest)
-async def update_request(request_data: UpdateRequest, db: AsyncSession = Depends(get_session), request_id: int = Path()):
+async def update_request(request_data: UpdateRequest, db: AsyncSession = Depends(get_session),
+                         request_id: int = Path()):
     query = await db.execute(select(Request).filter(Request.id == request_id))
     request = query.scalars().first()
 
@@ -379,3 +407,68 @@ async def delete_request(db: AsyncSession = Depends(get_session), request_id: in
     await db.delete(request)
     await db.commit()
     return {'detail': 'Successfully deleted'}
+
+
+############################################
+##
+############################################
+@router_logic_query.get('/get_rooms/{building_id}', response_model=GetBuildingResponse)
+async def get_buildings_by_floor(
+        floor: Optional[int] = None,
+        db: AsyncSession = Depends(get_session),
+        building_id: int = Path()):
+    building_query = await db.execute(select(Building).filter(Building.id == building_id))
+    building_result = building_query.scalars().first()
+    if building_result is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail='Building not found'
+        )
+
+    rooms_query = select(Room).options(selectinload(Room.room_items)).filter(Room.building_id == building_result.id)
+
+    if floor:
+        rooms_query = rooms_query.filter(Room.floor == floor)
+
+    execute_rooms_query = await db.execute(rooms_query)
+
+    rooms_result = execute_rooms_query.scalars().all()
+    return GetBuildingResponse.model_validate(
+        {
+            "id": building_result.id,
+            "tip": building_result.tip.value,
+            "floors": floor if floor else None,
+            "total_rooms": len(rooms_result),
+            "rooms": rooms_result
+        }
+    )
+
+
+@router_logic_query.get('/get_room/{room_id}')
+async def get_buildings_by_room(
+        db: AsyncSession = Depends(get_session),
+        room_id: int = Path()):
+    room_query = await db.execute(
+        select(Room)
+        .options(
+            selectinload(Room.room_items),
+            selectinload(Room.building).selectinload(Building.campus)
+        )
+        .filter(Room.id == room_id)
+    )
+    room_result = room_query.scalars().first()
+
+    if room_result is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail='Room not found'
+        )
+
+    return GetBuildingByRoomResponse.model_validate(
+        {
+            "room": room_result,
+            "room_items": room_result.room_items,
+            "building": room_result.building,
+            "campus": room_result.building.campus,
+        }
+    )

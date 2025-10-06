@@ -1,5 +1,5 @@
-from pydantic import BaseModel
-from typing import Optional
+from pydantic import BaseModel, validator
+from typing import Optional, List
 from compus.models import BuildingTip
 from datetime import date
 
@@ -12,8 +12,7 @@ class GetCampus(BaseModel):
     name: str
     address: str
 
-    class Config:
-        orm_mode = True
+    model_config = dict(from_attributes=True)
 
 
 class CreateCampus(BaseModel):
@@ -35,8 +34,7 @@ class GetBuilding(BaseModel):
     tip: BuildingTip
     floors: int
 
-    class Config:
-        orm_mode = True
+    model_config = dict(from_attributes=True)
 
 
 class CreateBuilding(BaseModel):
@@ -60,8 +58,7 @@ class GetRoom(BaseModel):
     name: str
     floor: int
 
-    class Config:
-        orm_mode = True
+    model_config = dict(from_attributes=True)
 
 
 class CreateRoom(BaseModel):
@@ -81,24 +78,29 @@ class UpdateRoom(BaseModel):
 ##########################
 class GetRoomItems(BaseModel):
     id: int
-    request_id: int
+    request_id: Optional[int] = None
     room_id: int
     name: str
     quantity: int
     data: date
     status: bool
 
-    class Config:
-        orm_mode = True
+    model_config = dict(from_attributes=True)
 
 
 class CreateRoomItems(BaseModel):
-    request_id: int
+    request_id: Optional[int] = None
     room_id: int
     name: str
     quantity: int
     data: date
     status: bool
+
+    @validator("request_id")
+    def validate_request_id(cls, v):
+        if v == 0:
+            return None
+        return v
 
 
 class UpdateRoomItems(BaseModel):
@@ -118,8 +120,7 @@ class GetRequest(BaseModel):
     user_id: int
     room_id: int
 
-    class Config:
-        orm_mode = True
+    model_config = dict(from_attributes=True)
 
 
 class CreateRequest(BaseModel):
@@ -131,3 +132,47 @@ class UpdateRequest(BaseModel):
     user_id: Optional[int] = None
     room_id: Optional[int] = None
 
+
+#############################################
+##
+#############################################
+class BuildingByFloorData(BaseModel):
+    building_id: int
+    floor: int
+
+
+class BuildingRoomItemForBuildingGet(BaseModel):
+    id: int
+    name: str
+    data: Optional[date]
+    quantity: int
+    status: bool
+
+    model_config = dict(from_attributes=True)
+
+
+class GetBuildingRoom(BaseModel):
+    id: int
+    name: str
+    room_items: List[BuildingRoomItemForBuildingGet] = []
+
+    model_config = dict(from_attributes=True)
+
+
+class GetBuildingResponse(BaseModel):
+    id: int
+    tip: Optional[str] = None
+    floors: int | None
+    total_rooms: int
+    rooms: List[GetBuildingRoom] = []
+
+    model_config = dict(from_attributes=True)
+
+
+class GetBuildingByRoomResponse(BaseModel):
+    room: GetRoom
+    room_items: Optional[List[GetRoomItems]] = []
+    building: GetBuilding
+    campus: GetBuildingRoom
+
+    model_config = dict(from_attributes=True)

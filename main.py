@@ -4,6 +4,7 @@ from compus.views import router_for_building as router_for_building
 from compus.views import router_for_room as router_for_room
 from compus.views import router_for_room_item as router_for_room_item
 from compus.views import router_for_request as router_for_request
+from compus.views import router_logic_query as router_logic_query
 
 app = FastAPI()
 
@@ -12,3 +13,4 @@ app.include_router(router_for_building)
 app.include_router(router_for_room)
 app.include_router(router_for_room_item)
 app.include_router(router_for_request)
+app.include_router(router_logic_query)

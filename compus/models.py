@@ -18,7 +18,7 @@ class Campus(BaseModel):
     name = Column(String(250))
     address = Column(String(250))
 
-    buildings = relationship('Building', back_populates='campus')
+    buildings = relationship('Building', back_populates='campus', lazy='selectin')
 
     def __repr__(self):
         return f'<Campus {self.name}>'
@@ -31,8 +31,8 @@ class Building(BaseModel):
     tip = Column(SqlEnum(BuildingTip), nullable=True)
     floors = Column(Integer)
 
-    campus = relationship('Campus', back_populates='buildings')
-    rooms = relationship('Room', back_populates='building')
+    campus = relationship('Campus', back_populates='buildings', lazy='selectin')
+    rooms = relationship('Room', back_populates='building', lazy='selectin')
 
     def __repr__(self):
         return f'<Building {self.name}>'
@@ -45,9 +45,9 @@ class Room(BaseModel):
     name = Column(String(250))
     floor = Column(Integer)
 
-    building = relationship('Building', back_populates='rooms')
-    room_items = relationship('RoomItems', back_populates='room')
-    requests = relationship('Request', back_populates='room')
+    building = relationship('Building', back_populates='rooms', lazy='selectin')
+    room_items = relationship('RoomItems', back_populates='room', lazy='selectin')
+    requests = relationship('Request', back_populates='room', lazy='selectin')
 
     def __repr__(self):
         return f'<Room {self.name}>'
@@ -63,8 +63,8 @@ class RoomItems(BaseModel):
     data = Column(Date)
     status = Column(Boolean, default=False)
 
-    room = relationship('Room', back_populates='room_items')
-    request = relationship('Request', back_populates='room_items')
+    room = relationship('Room', back_populates='room_items', lazy='selectin')
+    request = relationship('Request', back_populates='room_items', lazy='selectin')
 
     def __repr__(self):
         return f'<Item {self.name}>'
@@ -76,8 +76,8 @@ class Request(BaseModel):
     user_id = Column(Integer)
     room_id = Column(Integer, ForeignKey('rooms.id'))
 
-    room = relationship('Room', back_populates='requests')
-    room_items = relationship('RoomItems', back_populates='request')
+    room = relationship('Room', back_populates='requests', lazy='selectin')
+    room_items = relationship('RoomItems', back_populates='request', lazy='selectin')
 
     def __repr__(self):
         return f'<Room {self.room_id}'
